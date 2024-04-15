@@ -1,223 +1,249 @@
 #include <iostream>
-#include <array>
+#include <type_traits>
 #include <cmath>
 
-// Type traits to validate matrix size
-template <class T, size_t rows, size_t cols>
-struct MatrixTraits {
-    static constexpr bool valid = true;
+template <typename T>
+struct Numeric {
+    static constexpr bool value = std::is_arithmetic<T>::value;
 };
 
-// Class representing a matrix
-template <class T, size_t rows, size_t cols>
+template <typename T, size_t Rows, size_t Cols>
 class Matrix {
-    static_assert(MatrixTraits<T, rows, cols>::valid, "Invalid matrix size");
+    template <typename U, size_t R, size_t C>
+    friend class Matrix;
 
-    std::array<std::array<T, cols>, rows> data; // Data storage for the matrix
+private:
+    T data[Rows][Cols];
 
 public:
-    // Constructor for initializing the matrix with values
-    template<typename... Args>
-    Matrix(Args... args) : data{std::array<T, cols>{args...}...} {
-        static_assert(sizeof...(args) == rows * cols, "Wrong number of arguments");
+    Matrix() {}
+
+    explicit Matrix(const T& scalar) {
+        for (size_t i = 0; i < Rows; ++i)
+            for (size_t j = 0; j < Cols; ++j)
+                data[i][j] = scalar;
     }
 
-    // Matrix-vector multiplication
-    auto operator*(const std::array<T, cols>& vec) const {
-        std::array<T, rows> result = {};
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                result[i] += data[i][j] * vec[j];
+    Matrix(const T(&arr)[Rows][Cols]) {
+        for (size_t i = 0; i < Rows; ++i)
+            for (size_t j = 0; j < Cols; ++j)
+                data[i][j] = arr[i][j];
+    }
+
+    template <typename U>
+    auto operator*(const U& vec) const {
+        static_assert(Cols == Rows, "Invalid vector size");
+        using ResultType = std::decay_t<decltype(data[0][0] * vec.data[0][0])>;
+        Matrix<ResultType, Rows, 1> result;
+
+        for (size_t i = 0; i < Rows; ++i) {
+            ResultType sum = 0;
+            for (size_t j = 0; j < Cols; ++j)
+                sum += data[i][j] * vec.data[j][0];
+            result.data[i][0] = sum;
+        }
+        return result;
+    }
+
+    auto operator+(const Matrix<T, Rows, Cols>& other) const {
+        Matrix<T, Rows, Cols> result;
+        for (size_t i = 0; i < Rows; ++i)
+            for (size_t j = 0; j < Cols; ++j)
+                result.data[i][j] = data[i][j] + other.data[i][j];
+        return result;
+    }
+
+    auto operator-(const Matrix<T, Rows, Cols>& other) const {
+        Matrix<T, Rows, Cols> result;
+        for (size_t i = 0; i < Rows; ++i)
+            for (size_t j = 0; j < Cols; ++j)
+                result.data[i][j] = data[i][j] - other.data[i][j];
+        return result;
+    }
+
+    auto operator*(const Matrix<T, Cols, Rows>& other) const {
+        Matrix<T, Rows, Rows> result;
+        for (size_t i = 0; i < Rows; ++i) {
+            for (size_t j = 0; j < Rows; ++j) {
+                T sum = 0;
+                for (size_t k = 0; k < Cols; ++k)
+                    sum += data[i][k] * other.data[k][j];
+                result.data[i][j] = sum;
             }
         }
         return result;
     }
 
-    // Vector addition
-    auto operator+(const std::array<T, cols>& vec) const {
-        auto result = data;
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                result[i][j] += vec[j];
-            }
-        }
-        return result;
-    }
+    auto inverse() const {
+        static_assert(Rows == Cols, "Matrix must be square for inversion");
+        Matrix<T, Rows, Rows> result(*this);
+        Matrix<T, Rows, Rows> identity;
+        identity.makeIdentity();
 
-    // Vector subtraction
-    auto operator-(const std::array<T, cols>& vec) const {
-        auto result = data;
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                result[i][j] -= vec[j];
+        // Gauss-Jordan elimination
+        for (size_t i = 0; i < Rows; ++i) {
+            // Swap rows if necessary to get a non-zero pivot
+            if (result.data[i][i] == 0) {
+                size_t swapRow = i + 1;
+                while (swapRow < Rows && result.data[swapRow][i] == 0)
+                    ++swapRow;
+                if (swapRow == Rows) {
+                    // Matrix is singular, return an identity matrix
+                    return identity;
+                }
+                result.swapRows(i, swapRow);
+                identity.swapRows(i, swapRow);
             }
-        }
-        return result;
-    }
 
-    // Scalar multiplication for a matrix
-    auto operator*(const T& scalar) const {
-        auto result = data;
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                result[i][j] *= scalar;
+            // Scale row to have a pivot of 1
+            T pivot = result.data[i][i];
+            for (size_t j = 0; j < Rows; ++j) {
+                result.data[i][j] /= pivot;
+                identity.data[i][j] /= pivot;
             }
-        }
-        return result;
-    }
 
-    // Matrix multiplication
-    template <size_t other_cols>
-    auto operator*(const Matrix<T, cols, other_cols>& other) const {
-        Matrix<T, rows, other_cols> result;
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < other_cols; ++j) {
-                result.data[i][j] = 0;
-                for (size_t k = 0; k < cols; ++k) {
-                    result.data[i][j] += data[i][k] * other.data[k][j];
+            // Zero out other entries in the column
+            for (size_t k = 0; k < Rows; ++k) {
+                if (k != i) {
+                    T factor = result.data[k][i];
+                    for (size_t j = 0; j < Rows; ++j) {
+                        result.data[k][j] -= factor * result.data[i][j];
+                        identity.data[k][j] -= factor * identity.data[i][j];
+                    }
                 }
             }
         }
-        return result;
+
+        return identity;
     }
 
-    // Print matrix
-    void print() const {
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
+    auto luDecomposition() const {
+        Matrix<T, Rows, Rows> lower, upper;
+
+        for (size_t i = 0; i < Rows; ++i) {
+            for (size_t j = i; j < Rows; ++j) {
+                T sum = 0;
+                for (size_t k = 0; k < i; ++k)
+                    sum += lower.data[i][k] * upper.data[k][j];
+                upper.data[i][j] = data[i][j] - sum;
+            }
+            lower.data[i][i] = 1;
+            for (size_t j = i + 1; j < Rows; ++j) {
+                T sum = 0;
+                for (size_t k = 0; k < i; ++k)
+                    sum += lower.data[j][k] * upper.data[k][i];
+                lower.data[j][i] = (data[j][i] - sum) / upper.data[i][i];
+            }
+        }
+
+        return std::make_pair(lower, upper);
+    }
+
+    auto qrDecomposition() const {
+        Matrix<T, Rows, Rows> q, r;
+
+        for (size_t j = 0; j < Rows; ++j) {
+            Matrix<T, Rows, 1> v = getColumn(j);
+            for (size_t i = 0; i < j; ++i) {
+                T dotProduct = q.getColumn(i) * v;
+                v = v - dotProduct * q.getColumn(i);
+            }
+            T norm = v.norm();
+            q.setColumn(j, v / norm);
+            for (size_t i = 0; i < Rows; ++i) {
+                T dotProduct = q.getColumn(j) * getColumn(i);
+                r.data[j][i] = dotProduct;
+            }
+        }
+
+        return std::make_pair(q, r);
+    }
+
+    Matrix<T, Rows, 1> getColumn(size_t col) const {
+        Matrix<T, Rows, 1> column;
+        for (size_t i = 0; i < Rows; ++i)
+            column.data[i][0] = data[i][col];
+        return column;
+    }
+
+    void setColumn(size_t col, const Matrix<T, Rows, 1>& column) {
+        for (size_t i = 0; i < Rows; ++i)
+            data[i][col] = column.data[i][0];
+    }
+
+    void makeIdentity() {
+        for (size_t i = 0; i < Rows; ++i)
+            for (size_t j = 0; j < Cols; ++j)
+                data[i][j] = (i == j) ? 1 : 0;
+    }
+
+    void swapRows(size_t row1, size_t row2) {
+        for (size_t j = 0; j < Cols; ++j) {
+            T temp = data[row1][j];
+            data[row1][j] = data[row2][j];
+            data[row2][j] = temp;
+        }
+    }
+
+    void display() const {
+        for (size_t i = 0; i < Rows; ++i) {
+            for (size_t j = 0; j < Cols; ++j) {
                 std::cout << data[i][j] << " ";
             }
             std::cout << std::endl;
         }
     }
 
-    // Trigonometric functions
-    auto sin() const {
-        Matrix<T, rows, cols> result;
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                result.data[i][j] = std::sin(data[i][j]);
-            }
-        }
-        return result;
-    }
-
-    auto cos() const {
-        Matrix<T, rows, cols> result;
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                result.data[i][j] = std::cos(data[i][j]);
-            }
-        }
-        return result;
-    }
-
-    auto tan() const {
-        Matrix<T, rows, cols> result;
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                result.data[i][j] = std::tan(data[i][j]);
-            }
-        }
-        return result;
-    }
-
-    auto asin() const {
-        Matrix<T, rows, cols> result;
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                result.data[i][j] = std::asin(data[i][j]);
-            }
-        }
-        return result;
-    }
-
-    auto acos() const {
-        Matrix<T, rows, cols> result;
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                result.data[i][j] = std::acos(data[i][j]);
-            }
-        }
-        return result;
-    }
-
-    auto atan() const {
-        Matrix<T, rows, cols> result;
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                result.data[i][j] = std::atan(data[i][j]);
-            }
-        }
-        return result;
+    T norm() const {
+        T sum = 0;
+        for (size_t i = 0; i < Rows; ++i)
+            sum += data[i][0] * data[i][0];
+        return std::sqrt(sum);
     }
 };
 
 int main() {
-    // Create matrices and vector
-    Matrix<double, 2, 2> A(1, 2, 3, 4);
-    Matrix<double, 2, 2> B(5, 6, 7, 8);
-    std::array<double, 2> vec = {5, 6};
+    double arr1[2][2] = {{1, 2}, {3, 4}};
+    double arr2[2][2] = {{1, 0}, {0, 1}};
 
-    // Perform operations
-    auto matrixVectorResult = A * vec;
-    auto vectorAdditionResult = A + vec;
-    auto vectorSubtractionResult = A - vec;
-    auto scalarMultiplicationResult = A * 2.0;
-    auto matrixMultiplicationResult = A * B;
+    Matrix<double, 2, 2> mat1(arr1);
+    Matrix<double, 2, 2> mat2(arr2);
 
-    auto sineResult = A.sin();
-    auto cosineResult = A.cos();
-    auto tangentResult = A.tan();
-    auto arcsineResult = A.asin();
-    auto arccosineResult = A.acos();
-    auto arctangentResult = A.atan();
+    std::cout << "Matrix 1:" << std::endl;
+    mat1.display();
 
-    // Output results
-    std::cout << "Matrix-Vector Multiplication Result: ";
-    for (size_t i = 0; i < 2; ++i) {
-        std::cout << matrixVectorResult[i] << " ";
-    }
-    std::cout << std::endl;
+    std::cout << "Matrix 2:" << std::endl;
+    mat2.display();
 
-    std::cout << "Vector Addition Result: ";
-    for (size_t i = 0; i < 2; ++i) {
-        std::cout << vectorAdditionResult.data[0][i] << " ";
-    }
-    std::cout << std::endl;
+    auto result_addition = mat1 + mat2;
+    std::cout << "Matrix addition result:" << std::endl;
+    result_addition.display();
 
-    std::cout << "Vector Subtraction Result: ";
-    for (size_t i = 0; i < 2; ++i) {
-        std::cout << vectorSubtractionResult.data[0][i] << " ";
-    }
-    std::cout << std::endl;
+    auto result_subtraction = mat1 - mat2;
+    std::cout << "Matrix subtraction result:" << std::endl;
+    result_subtraction.display();
 
-    std::cout << "Scalar Multiplication for Vector Result: ";
-    for (size_t i = 0; i < 2; ++i) {
-        std::cout << scalarMultiplicationResult.data[0][i] << " ";
-    }
-    std::cout << std::endl;
+    auto result_multiplication = mat1 * mat2;
+    std::cout << "Matrix multiplication result:" << std::endl;
+    result_multiplication.display();
 
-    std::cout << "Matrix Multiplication Result:" << std::endl;
-    matrixMultiplicationResult.print();
+    auto result_inverse = mat1.inverse();
+    std::cout << "Matrix inversion result:" << std::endl;
+    result_inverse.display();
 
-    std::cout << "Sine of Matrix A:" << std::endl;
-    sineResult.print();
+    auto lu = mat1.luDecomposition();
+    std::cout << "LU Decomposition:" << std::endl;
+    std::cout << "Lower Matrix:" << std::endl;
+    lu.first.display();
+    std::cout << "Upper Matrix:" << std::endl;
+    lu.second.display();
 
-    std::cout << "Cosine of Matrix A:" << std::endl;
-    cosineResult.print();
-
-    std::cout << "Tangent of Matrix A:" << std::endl;
-    tangentResult.print();
-
-    std::cout << "Arcsine of Matrix A:" << std::endl;
-    arcsineResult.print();
-
-    std::cout << "Arccosine of Matrix A:" << std::endl;
-    arccosineResult.print();
-
-    std::cout << "Arctangent of Matrix A:" << std::endl;
-    arctangentResult.print();
+    auto qr = mat1.qrDecomposition();
+    std::cout << "QR Decomposition:" << std::endl;
+    std::cout << "Q Matrix:" << std::endl;
+    qr.first.display();
+    std::cout << "R Matrix:" << std::endl;
+    qr.second.display();
 
     return 0;
 }
