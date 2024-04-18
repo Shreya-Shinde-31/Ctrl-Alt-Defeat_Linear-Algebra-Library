@@ -17,9 +17,11 @@ These operations include calculating the norm of a vector or matrix, and calcula
 #include <stdexcept>
 #include <vector>
 
+using namespace std;
+
 template <typename T>
 struct Numeric {
-    static constexpr bool value = std::is_arithmetic<T>::value;
+    static constexpr bool value = is_arithmetic<T>::value;
 };
 
 template <typename T, size_t Rows, size_t Cols>
@@ -51,10 +53,11 @@ public:
                 data[i][j] = arr[i][j];
     }
 
+    //matrix-vector
     template <typename U>
     auto operator*(const U& vec) const {
         static_assert(Cols == Rows, "Invalid vector size");
-        using ResultType = std::decay_t<decltype(data[0][0] * vec.data[0][0])>;
+        using ResultType = decay_t<decltype(data[0][0] * vec.data[0][0])>;
         Matrix<ResultType, Rows, 1> result;
 
         for (size_t i = 0; i < Rows; ++i) {
@@ -65,7 +68,7 @@ public:
         }
         return result;
     }
-
+    //matrix-matrix
     auto operator+(const Matrix<T, Rows, Cols>& other) const {
         Matrix<T, Rows, Cols> result;
         for (size_t i = 0; i < Rows; ++i)
@@ -74,6 +77,7 @@ public:
         return result;
     }
 
+    //matrix-matrix
     auto operator-(const Matrix<T, Rows, Cols>& other) const {
         Matrix<T, Rows, Cols> result;
         for (size_t i = 0; i < Rows; ++i)
@@ -82,6 +86,7 @@ public:
         return result;
     }
 
+    //matrix by a scalar
     auto operator*(const T& scalar) const {
         Matrix<T, Rows, Cols> result;
         for (size_t i = 0; i < Rows; ++i)
@@ -90,11 +95,20 @@ public:
         return result;
     }
 
+    //matrix-matrix
     auto operator*(const Matrix<T, Rows, Cols>& other) const {
-        Matrix<T, Rows, Cols> result;
-        for (size_t i = 0; i < Rows; ++i)
-            for (size_t j = 0; j < Cols; ++j)
-                result.data[i][j] = data[i][j] * other.data[i][j];
+        using ResultType = decay_t<decltype(T() * T())>;
+        Matrix<ResultType, Rows, Cols> result;
+
+        for (size_t i = 0; i < Rows; ++i) {
+            for (size_t j = 0; j < Cols; ++j) {
+                ResultType sum = 0;
+                for (size_t k = 0; k < Cols; ++k) {
+                    sum += data[i][k] * other.data[k][j];
+                }
+                result.data[i][j] = sum;
+            }
+        }
         return result;
     }
 
@@ -109,15 +123,15 @@ public:
     void display() const {
         for (size_t i = 0; i < Rows; ++i) {
             for (size_t j = 0; j < Cols; ++j) {
-                std::cout << data[i][j] << " ";
+                cout << data[i][j] << " ";
             }
-            std::cout << std::endl;
+            cout << endl;
         }
     }
 
     Matrix<T, Rows, Cols> invert() const {
         if (Rows != Cols) {
-            throw std::runtime_error("Matrix must be square for inversion");
+            throw runtime_error("Matrix must be square for inversion");
         } else {
             Matrix<T, Rows, Cols> identity;
             for (size_t i = 0; i < Rows; ++i) {
@@ -130,7 +144,7 @@ public:
             for (size_t i = 0; i < Rows; ++i) {
                 T pivot = augmented.data[i][i];
                 if (pivot == 0) {
-                    throw std::runtime_error("Matrix is singular");
+                    throw runtime_error("Matrix is singular");
                 }
 
                 for (size_t j = 0; j < Cols; ++j) {
@@ -163,12 +177,12 @@ public:
         return result;
     }
 
-    std::vector<T> eigenvalues(size_t iterations = 1000, double epsilon = 1e-6) const {
+    vector<T> eigenvalues(size_t iterations = 1000, double epsilon = 1e-6) const {
         if (Rows != Cols) {
-            throw std::runtime_error("Matrix must be square to compute eigenvalues");
+            throw runtime_error("Matrix must be square to compute eigenvalues");
         }
 
-        std::vector<T> eigenvalues;
+        vector<T> eigenvalues;
         Matrix<T, Rows, 1> b;
 
         // Start with a random vector
@@ -184,11 +198,11 @@ public:
             // Calculate norm and diff
             for (size_t i = 0; i < Rows; ++i) {
                 norm += b_next(i, 0) * b_next(i, 0);
-                diff += std::abs(b_next(i, 0) - b(i, 0));
+                diff += abs(b_next(i, 0) - b(i, 0));
             }
 
             // Normalize b_next
-            norm = std::sqrt(norm);
+            norm = sqrt(norm);
             for (size_t i = 0; i < Rows; ++i) {
                 b_next(i, 0) /= norm;
             }
@@ -209,9 +223,9 @@ public:
         return eigenvalues;
     }
     //LU Decomposition
-    std::pair<Matrix<T, Rows, Rows>, Matrix<T, Rows, Cols>> luDecomposition() const {
+    pair<Matrix<T, Rows, Rows>, Matrix<T, Rows, Cols>> luDecomposition() const {
         if (Rows != Cols) {
-            throw std::runtime_error("LU decomposition requires a square matrix");
+            throw runtime_error("LU decomposition requires a square matrix");
         }
 
         Matrix<T, Rows, Rows> L, U;
@@ -222,7 +236,7 @@ public:
 
             for (size_t k = i + 1; k < Rows; ++k) {
                 if (U(i, i) == 0) {
-                    throw std::runtime_error("LU decomposition failed: zero pivot encountered");
+                    throw runtime_error("LU decomposition failed: zero pivot encountered");
                 }
 
                 T factor = U(k, i) / U(i, i);
@@ -234,7 +248,7 @@ public:
             }
         }
 
-        return std::make_pair(L, U);
+        return make_pair(L, U);
     }
     //Norm 
     T norm() const {
@@ -244,7 +258,7 @@ public:
                 sum += data[i][j] * data[i][j];
             }
         }
-        return std::sqrt(sum);
+        return sqrt(sum);
     }
 
     T innerProduct(const Matrix<T, Rows, 1>& other) const {
@@ -258,7 +272,7 @@ public:
 
 template <typename T, size_t Rows, size_t Cols1, size_t Cols2>
 auto operator*(const Matrix<T, Rows, Cols1>& mat1, const Matrix<T, Cols1, Cols2>& mat2) {
-    using ResultType = std::decay_t<decltype(T() * T())>;
+    using ResultType = decay_t<decltype(T() * T())>;
     Matrix<ResultType, Rows, Cols2> result;
 
     for (size_t i = 0; i < Rows; ++i) {
@@ -291,59 +305,59 @@ int main() {
     Matrix<double, 2, 2> mat2(arr2);
     Matrix<double, 2, 1> mat3(arr3);
 
-    std::cout << "Matrix 1:" << std::endl;
+    cout << "Matrix 1:" << endl;
     mat1.display();
 
-    std::cout << "Matrix 2:" << std::endl;
+    cout << "Matrix 2:" << endl;
     mat2.display();
 
-    std::cout << "Vector:" << std::endl;
+    cout << "Vector:" << endl;
     mat3.display();
 
     auto result1 = mat1 * mat2;
-    std::cout << "Matrix-matrix multiplication result:" << std::endl;
+    cout << "Matrix-matrix multiplication result:" << endl;
     result1.display();
 
     auto result2 = mat1 * mat3;
-    std::cout << "Matrix-vector multiplication result:" << std::endl;
+    cout << "Matrix-vector multiplication result:" << endl;
     result2.display();
 
     auto result3 = mat1 + mat2;
-    std::cout << "Matrix addition result:" << std::endl;
+    cout << "Matrix addition result:" << endl;
     result3.display();
 
     auto result4 = mat1 - mat2;
-    std::cout << "Matrix subtraction result:" << std::endl;
+    cout << "Matrix subtraction result:" << endl;
     result4.display();
 
     auto result5 = mat3 * 2.0; // Multiplication of vector by a scalar
-    std::cout << "Vector multiplication by scalar result:" << std::endl;
+    cout << "Vector multiplication by scalar result:" << endl;
     result5.display();
 
     try {
         Matrix<double, 2, 2> inverse = mat1.invert();
-        std::cout << "Inverse Matrix:" << std::endl;
+        cout << "Inverse Matrix:" << endl;
         inverse.display();
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+    } catch (const exception& e) {
+        cerr << "Error: " << e.what() << endl;
     }
 
     try {
         // Calculate eigenvalues
         auto eigenvalues = mat1.eigenvalues();
-        std::cout << "Eigenvalues:" << std::endl;
+        cout << "Eigenvalues:" << endl;
         for (const auto& value : eigenvalues) {
-            std::cout << value << std::endl;
+            cout << value << endl;
         }
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+    } catch (const exception& e) {
+        cerr << "Error: " << e.what() << endl;
     }
 
     try {
         double arr1[3][3] = {{4, 3, 2}, {2, 2, 3}, {3, 1, 2}};
         Matrix<double, 3, 3> mat1(arr1);
 
-        std::cout << "Matrix for LU decomposition:" << std::endl;
+        cout << "Matrix for LU decomposition:" << endl;
         mat1.display();
 
         // Perform LU decomposition
@@ -351,13 +365,13 @@ int main() {
         Matrix<double, 3, 3> L = luDecomp.first;
         Matrix<double, 3, 3> U = luDecomp.second;
 
-        std::cout << "Lower Triangular Matrix (L):" << std::endl;
+        cout << "Lower Triangular Matrix (L):" << endl;
         L.display();
 
-        std::cout << "Upper Triangular Matrix (U):" << std::endl;
+        cout << "Upper Triangular Matrix (U):" << endl;
         U.display();
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+    } catch (const exception& e) {
+        cerr << "Error: " << e.what() << endl;
     }
 
     // Define vectors
@@ -370,11 +384,11 @@ int main() {
     vec2(1, 0) = 4;
 
     // Calculate norm of vectors
-    std::cout << "Norm of vec1: " << vec1.norm() << std::endl;
-    std::cout << "Norm of vec2: " << vec2.norm() << std::endl;
+    cout << "Norm of vec1: " << vec1.norm() << endl;
+    cout << "Norm of vec2: " << vec2.norm() << endl;
 
     // Calculate inner product of vectors
-    std::cout << "Inner product of vec1 and vec2: " << vec1.innerProduct(vec2) << std::endl;
+    cout << "Inner product of vec1 and vec2: " << vec1.innerProduct(vec2) << endl;
 
     return 0;
 }
