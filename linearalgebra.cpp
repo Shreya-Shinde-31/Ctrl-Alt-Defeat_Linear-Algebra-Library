@@ -5,390 +5,412 @@ These operations include matrix-vector multiplication, vector addition and subtr
 These operations include matrix addition and subtraction, matrix multiplication, and matrix inversion.
 3.Linear equation solving:
 These operations include solving systems of linear equations and finding the eigenvalues of a matrix.
-4.Decompositions:
-These operations include LU decomposition.
-5.Norms and inner products:
-These operations include calculating the norm of a vector or matrix, and calculating the inner product of two vectors.
+4.Norms and inner products:
+These operations include calculating the norm of a vector or matrix, and calculating the inner product.
 */
 
 #include <iostream>
-#include <type_traits>
+#include <vector>
 #include <cmath>
 #include <stdexcept>
-#include <vector>
 
 using namespace std;
 
 template <typename T>
-struct Numeric {
-    static constexpr bool value = is_arithmetic<T>::value;
-};
+class Matrix;
 
-template <typename T, size_t Rows, size_t Cols>
+template <typename T>
+T determinant(const Matrix<T>& mat);
+
+template <typename T>
 class Matrix {
-    template <typename U, size_t R, size_t C>
-    friend class Matrix;
-
-    template <typename U, size_t R, size_t C1, size_t C2>
-    friend auto operator*(const Matrix<U, R, C1>&, const Matrix<U, C1, C2>&);
-
-    template <typename U, size_t R>
-    friend auto operator*(const Matrix<U, R, 1>&, const Matrix<U, 1, R>&);
-
 private:
-    T data[Rows][Cols];
+    vector<vector<T>> data;
 
 public:
-    Matrix() {}
+    Matrix(size_t rows, size_t cols) : data(rows, vector<T>(cols)) {}
 
-    explicit Matrix(const T& scalar) {
-        for (size_t i = 0; i < Rows; ++i)
-            for (size_t j = 0; j < Cols; ++j)
-                data[i][j] = scalar;
+    void setElement(size_t row, size_t col, T value) {
+        data[row][col] = value;
     }
 
-    Matrix(const T(&arr)[Rows][Cols]) {
-        for (size_t i = 0; i < Rows; ++i)
-            for (size_t j = 0; j < Cols; ++j)
-                data[i][j] = arr[i][j];
-    }
-
-    //matrix-vector
-    template <typename U>
-    auto operator*(const U& vec) const {
-        static_assert(Cols == Rows, "Invalid vector size");
-        using ResultType = decay_t<decltype(data[0][0] * vec.data[0][0])>;
-        Matrix<ResultType, Rows, 1> result;
-
-        for (size_t i = 0; i < Rows; ++i) {
-            ResultType sum = 0;
-            for (size_t j = 0; j < Cols; ++j)
-                sum += data[i][j] * vec.data[j][0];
-            result(i, 0) = sum;
-        }
-        return result;
-    }
-    //matrix-matrix
-    auto operator+(const Matrix<T, Rows, Cols>& other) const {
-        Matrix<T, Rows, Cols> result;
-        for (size_t i = 0; i < Rows; ++i)
-            for (size_t j = 0; j < Cols; ++j)
-                result.data[i][j] = data[i][j] + other.data[i][j];
-        return result;
-    }
-
-    //matrix-matrix
-    auto operator-(const Matrix<T, Rows, Cols>& other) const {
-        Matrix<T, Rows, Cols> result;
-        for (size_t i = 0; i < Rows; ++i)
-            for (size_t j = 0; j < Cols; ++j)
-                result.data[i][j] = data[i][j] - other.data[i][j];
-        return result;
-    }
-
-    //matrix by a scalar
-    auto operator*(const T& scalar) const {
-        Matrix<T, Rows, Cols> result;
-        for (size_t i = 0; i < Rows; ++i)
-            for (size_t j = 0; j < Cols; ++j)
-                result.data[i][j] = data[i][j] * scalar;
-        return result;
-    }
-
-    //matrix-matrix
-    auto operator*(const Matrix<T, Rows, Cols>& other) const {
-        using ResultType = decay_t<decltype(T() * T())>;
-        Matrix<ResultType, Rows, Cols> result;
-
-        for (size_t i = 0; i < Rows; ++i) {
-            for (size_t j = 0; j < Cols; ++j) {
-                ResultType sum = 0;
-                for (size_t k = 0; k < Cols; ++k) {
-                    sum += data[i][k] * other.data[k][j];
-                }
-                result.data[i][j] = sum;
-            }
-        }
-        return result;
-    }
-
-    T& operator()(size_t row, size_t col) {
+    T getElement(size_t row, size_t col) const {
         return data[row][col];
     }
 
-    const T& operator()(size_t row, size_t col) const {
-        return data[row][col];
+    size_t numRows() const {
+        return data.size();
+    }
+
+    size_t numCols() const {
+        return data.empty() ? 0 : data[0].size();
     }
 
     void display() const {
-        for (size_t i = 0; i < Rows; ++i) {
-            for (size_t j = 0; j < Cols; ++j) {
+        for (size_t i = 0; i < numRows(); ++i) {
+            for (size_t j = 0; j < numCols(); ++j) {
                 cout << data[i][j] << " ";
             }
             cout << endl;
         }
     }
-
-    Matrix<T, Rows, Cols> invert() const {
-        if (Rows != Cols) {
-            throw runtime_error("Matrix must be square for inversion");
-        } else {
-            Matrix<T, Rows, Cols> identity;
-            for (size_t i = 0; i < Rows; ++i) {
-                for (size_t j = 0; j < Cols; ++j) {
-                    identity.data[i][j] = (i == j) ? 1 : 0;
-                }
-            }
-
-            Matrix<T, Rows, Cols> augmented(*this);
-            for (size_t i = 0; i < Rows; ++i) {
-                T pivot = augmented.data[i][i];
-                if (pivot == 0) {
-                    throw runtime_error("Matrix is singular");
-                }
-
-                for (size_t j = 0; j < Cols; ++j) {
-                    augmented.data[i][j] /= pivot;
-                    identity.data[i][j] /= pivot;
-                }
-
-                for (size_t k = 0; k < Rows; ++k) {
-                    if (k != i) {
-                        T factor = augmented.data[k][i];
-                        for (size_t j = 0; j < Cols; ++j) {
-                            augmented.data[k][j] -= augmented.data[i][j] * factor;
-                            identity.data[k][j] -= identity.data[i][j] * factor;
-                        }
-                    }
-                }
-            }
-
-            return identity;
+//Matrix Addition
+    Matrix<T> operator+(const Matrix<T>& other) const {
+        if (numRows() != other.numRows() || numCols() != other.numCols()) {
+            throw invalid_argument("Matrix dimensions must match for addition");
         }
-    }
-
-    Matrix<T, Cols, Rows> transpose() const {
-        Matrix<T, Cols, Rows> result;
-        for (size_t i = 0; i < Rows; ++i) {
-            for (size_t j = 0; j < Cols; ++j) {
-                result.data[j][i] = data[i][j];
+        Matrix<T> result(numRows(), numCols());
+        for (size_t i = 0; i < numRows(); ++i) {
+            for (size_t j = 0; j < numCols(); ++j) {
+                result.setElement(i, j, data[i][j] + other.getElement(i, j));
             }
         }
         return result;
     }
-
-    vector<T> eigenvalues(size_t iterations = 1000, double epsilon = 1e-6) const {
-        if (Rows != Cols) {
-            throw runtime_error("Matrix must be square to compute eigenvalues");
+//Matrix Subtraction
+    Matrix<T> operator-(const Matrix<T>& other) const {
+        if (numRows() != other.numRows() || numCols() != other.numCols()) {
+            throw invalid_argument("Matrix dimensions must match for subtraction");
         }
-
-        vector<T> eigenvalues;
-        Matrix<T, Rows, 1> b;
-
-        // Start with a random vector
-        for (size_t i = 0; i < Rows; ++i) {
-            b(i, 0) = static_cast<T>(rand()) / RAND_MAX; // Random initialization
+        Matrix<T> result(numRows(), numCols());
+        for (size_t i = 0; i < numRows(); ++i) {
+            for (size_t j = 0; j < numCols(); ++j) {
+                result.setElement(i, j, data[i][j] - other.getElement(i, j));
+            }
         }
-
-        for (size_t iter = 0; iter < iterations; ++iter) {
-            Matrix<T, Rows, 1> b_next = (*this) * b;
-            T norm = 0;
-            T diff = 0;
-
-            // Calculate norm and diff
-            for (size_t i = 0; i < Rows; ++i) {
-                norm += b_next(i, 0) * b_next(i, 0);
-                diff += abs(b_next(i, 0) - b(i, 0));
-            }
-
-            // Normalize b_next
-            norm = sqrt(norm);
-            for (size_t i = 0; i < Rows; ++i) {
-                b_next(i, 0) /= norm;
-            }
-
-            // Check convergence
-            if (diff < epsilon) {
-                break;
-            }
-
-            b = b_next;
-        }
-
-        // Rayleigh quotient
-        Matrix<T, 1, Rows> b_transpose = b.transpose();
-        Matrix<T, 1, 1> eigenvalue = b_transpose * (*this * b);
-
-        eigenvalues.push_back(eigenvalue(0, 0));
-        return eigenvalues;
+        return result;
     }
-    //LU Decomposition
-    pair<Matrix<T, Rows, Rows>, Matrix<T, Rows, Cols>> luDecomposition() const {
-        if (Rows != Cols) {
-            throw runtime_error("LU decomposition requires a square matrix");
-        }
-
-        Matrix<T, Rows, Rows> L, U;
-        U = *this;
-
-        for (size_t i = 0; i < Rows; ++i) {
-            L(i, i) = 1;
-
-            for (size_t k = i + 1; k < Rows; ++k) {
-                if (U(i, i) == 0) {
-                    throw runtime_error("LU decomposition failed: zero pivot encountered");
-                }
-
-                T factor = U(k, i) / U(i, i);
-                L(k, i) = factor;
-
-                for (size_t j = i; j < Rows; ++j) {
-                    U(k, j) -= factor * U(i, j);
-                }
+//Scalar Multiplication
+    Matrix<T> operator*(T scalar) const {
+        Matrix<T> result(numRows(), numCols());
+        for (size_t i = 0; i < numRows(); ++i) {
+            for (size_t j = 0; j < numCols(); ++j) {
+                result.setElement(i, j, data[i][j] * scalar);
             }
         }
-
-        return make_pair(L, U);
+        return result;
     }
-    //Norm 
+//Matrix Multiplication
+    Matrix<T> operator*(const Matrix<T>& other) const {
+        if (numCols() != other.numRows()) {
+            throw invalid_argument("Number of columns in first matrix must match number of rows in second matrix for multiplication");
+        }
+        Matrix<T> result(numRows(), other.numCols());
+        for (size_t i = 0; i < numRows(); ++i) {
+            for (size_t j = 0; j < other.numCols(); ++j) {
+                T sum = 0;
+                for (size_t k = 0; k < numCols(); ++k) {
+                    sum += data[i][k] * other.getElement(k, j);
+                }
+                result.setElement(i, j, sum);
+            }
+        }
+        return result;
+    }
+//Transpose
+    Matrix<T> transpose() const {
+        Matrix<T> result(numCols(), numRows());
+        for (size_t i = 0; i < numRows(); ++i) {
+            for (size_t j = 0; j < numCols(); ++j) {
+                result.setElement(j, i, data[i][j]);
+            }
+        }
+        return result;
+    }
+//Norm
     T norm() const {
         T sum = 0;
-        for (size_t i = 0; i < Rows; ++i) {
-            for (size_t j = 0; j < Cols; ++j) {
+        for (size_t i = 0; i < numRows(); ++i) {
+            for (size_t j = 0; j < numCols(); ++j) {
                 sum += data[i][j] * data[i][j];
             }
         }
         return sqrt(sum);
     }
-
-    T innerProduct(const Matrix<T, Rows, 1>& other) const {
+//Inner Product
+    T innerProduct(const Matrix<T>& other) const {
+        if (numRows() != other.numRows() || numCols() != 1 || other.numCols() != 1) {
+            throw invalid_argument("Both inputs must be column vectors of the same size for inner product");
+        }
         T sum = 0;
-        for (size_t i = 0; i < Rows; ++i) {
-            sum += data[i][0] * other(i, 0);
+        for (size_t i = 0; i < numRows(); ++i) {
+            sum += data[i][0] * other.getElement(i, 0);
         }
         return sum;
     }
+//inverse
+    Matrix<T> inverse() const {
+        // Only implemented for 2x2 matrices for demonstration purposes
+        if (numRows() != numCols() || numRows() != 2) {
+            throw invalid_argument("Matrix inversion is only supported for 2x2 matrices");
+        }
+        T det = determinant(*this);
+        if (det == 0) {
+            throw invalid_argument("Matrix is singular, cannot be inverted");
+        }
+        Matrix<T> result(2, 2);
+        result.setElement(0, 0, data[1][1] / det);
+        result.setElement(0, 1, -data[0][1] / det);
+        result.setElement(1, 0, -data[1][0] / det);
+        result.setElement(1, 1, data[0][0] / det);
+        return result;
+    }
+//Eigen Values
+    vector<T> eigenValues() const {
+        if (numRows() != numRows()) {
+            throw invalid_argument("Eigenvalues can only be calculated for square matrices");
+        }
+
+        if (numRows() != 2) {
+            throw invalid_argument("Eigenvalues calculation is only supported for 2x2 matrices");
+        }
+        T a = data[0][0];
+        T b = data[0][1];
+        T c = data[1][0];
+        T d = data[1][1];
+        T discriminant = sqrt((a + d) * (a + d) - 4 * (a * d - b * c));
+        T lambda1 = (a + d + discriminant) / 2;
+        T lambda2 = (a + d - discriminant) / 2;
+        return {lambda1, lambda2};
+    }
 };
 
-template <typename T, size_t Rows, size_t Cols1, size_t Cols2>
-auto operator*(const Matrix<T, Rows, Cols1>& mat1, const Matrix<T, Cols1, Cols2>& mat2) {
-    using ResultType = decay_t<decltype(T() * T())>;
-    Matrix<ResultType, Rows, Cols2> result;
-
-    for (size_t i = 0; i < Rows; ++i) {
-        for (size_t j = 0; j < Cols2; ++j) {
-            ResultType sum = 0;
-            for (size_t k = 0; k < Cols1; ++k) {
-                sum += mat1(i, k) * mat2(k, j);
-            }
-            result(i, j) = sum;
-        }
+// determinant function as a friend of the Matrix class template
+template<typename T>
+T determinant(const Matrix<T>& mat) {
+    // Implementation for 2x2 matrix determinant
+    if (mat.numRows() != 2 || mat.numCols() != 2) {
+        throw invalid_argument("Determinant calculation is only supported for 2x2 matrices");
     }
-
-    return result;
+    return mat.getElement(0, 0) * mat.getElement(1, 1) - mat.getElement(0, 1) * mat.getElement(1, 0);
 }
 
-template <typename T, size_t Rows>
-auto operator*(const Matrix<T, Rows, 1>& mat, const Matrix<T, 1, Rows>& vec) {
-    T result = 0;
-    for (size_t i = 0; i < Rows; ++i)
-        result += mat(i, 0) * vec(0, i);
-    return result;
+template <typename T>
+void performAddition(const Matrix<T>& mat1, const Matrix<T>& mat2, bool isMatrix1, bool isMatrix2) {
+    Matrix<T> result_add = mat1 + mat2;
+    cout << "Addition Result:" << endl;
+    result_add.display();
+}
+
+template <typename T>
+void performSubtraction(const Matrix<T>& mat1, const Matrix<T>& mat2, bool isMatrix1, bool isMatrix2) {
+    Matrix<T> result_sub = mat1 - mat2;
+    cout << "Subtraction Result:" << endl;
+    result_sub.display();
+}
+
+template <typename T>
+void performScalarMultiplication(const Matrix<T>& mat, bool isMatrix) {
+    T scalar;
+    cout << "Enter the scalar value: ";
+    cin >> scalar;
+    Matrix<T> result_mult = mat * scalar;
+    cout << "Scalar Multiplication Result:" << endl;
+    result_mult.display();
+}
+
+template <typename T>
+void performMatrixMultiplication(const Matrix<T>& mat1, const Matrix<T>& mat2, bool isMatrix1, bool isMatrix2) {
+    Matrix<T> result_mult = mat1 * mat2;
+    cout << "Matrix Multiplication Result:" << endl;
+    result_mult.display();
+}
+
+template <typename T>
+void performTranspose(const Matrix<T>& mat, bool isMatrix) {
+    Matrix<T> result_transpose = mat.transpose();
+    cout << "Transpose Result:" << endl;
+    result_transpose.display();
+}
+
+template <typename T>
+void performNorm(const Matrix<T>& mat, bool isMatrix) {
+    T matrixNorm = mat.norm();
+    cout << "Norm Result:" << endl;
+    cout << matrixNorm << endl;
+}
+
+template <typename T>
+void performInnerProduct(const Matrix<T>& mat1, const Matrix<T>& mat2, bool isMatrix1, bool isMatrix2) {
+    T innerProd = mat1.innerProduct(mat2);
+    cout << "Inner Product Result:" << endl;
+    cout << innerProd << endl;
+}
+
+template <typename T>
+void performInverse(const Matrix<T>& mat, bool isMatrix) {
+    try {
+        Matrix<T> result_inverse = mat.inverse();
+        cout << "Inverse Result:" << endl;
+        result_inverse.display();
+    } catch (const invalid_argument& e) {
+        cerr << e.what() << endl;
+    }
+}
+
+template <typename T>
+void performEigenValues(const Matrix<T>& mat, bool isMatrix) {
+    try {
+        vector<T> eigenVals = mat.eigenValues();
+        cout << "Eigenvalues:" << endl;
+        cout << "λ1: " << eigenVals[0] << ", λ2: " << eigenVals[1] << endl;
+    } catch (const invalid_argument& e) {
+        cerr << e.what() << endl;
+    }
 }
 
 int main() {
-    double arr1[2][2] = {{4, 7}, {2, 6}};
-    double arr2[2][2] = {{1, 2}, {3, 4}};
-    double arr3[2][1] = {{1}, {2}};
+    size_t rows1, cols1, rows2, cols2;
 
-    Matrix<double, 2, 2> mat1(arr1);
-    Matrix<double, 2, 2> mat2(arr2);
-    Matrix<double, 2, 1> mat3(arr3);
+    cout << "Enter the number of rows for matrix 1: ";
+    cin >> rows1;
+    cout << "Enter the number of columns for matrix 1: ";
+    cin >> cols1;
+
+    Matrix<int> mat1(rows1, cols1);
+    cout << "Enter elements for matrix 1:" << endl;
+    for (size_t i = 0; i < rows1; ++i) {
+        for (size_t j = 0; j < cols1; ++j) {
+            int value;
+            cout << "Enter element at position (" << i << ", " << j << "): ";
+            cin >> value;
+            mat1.setElement(i, j, value);
+        }
+    }
 
     cout << "Matrix 1:" << endl;
     mat1.display();
 
+    cout << "Enter the number of rows for matrix 2: ";
+    cin >> rows2;
+    cout << "Enter the number of columns for matrix 2: ";
+    cin >> cols2;
+
+    Matrix<int> mat2(rows2, cols2);
+    cout << "Enter elements for matrix 2:" << endl;
+    for (size_t i = 0; i < rows2; ++i) {
+        for (size_t j = 0; j < cols2; ++j) {
+            int value;
+            cout << "Enter element at position (" << i << ", " << j << "): ";
+            cin >> value;
+            mat2.setElement(i, j, value);
+        }
+    }
+
     cout << "Matrix 2:" << endl;
     mat2.display();
 
-    cout << "Vector:" << endl;
-    mat3.display();
+    int choice;
+    do {
+        cout << "Menu:" << endl;
+        cout << "1. Matrix Addition" << endl;
+        cout << "2. Matrix Subtraction" << endl;
+        cout << "3. Scalar Multiplication" << endl;
+        cout << "4. Matrix Multiplication" << endl;
+        cout << "5. Transpose" << endl;
+        cout << "6. Norm" << endl;
+        cout << "7. Inner Product" << endl;
+        cout << "8. Inverse" << endl;
+        cout << "9. Eigenvalues" << endl;
+        cout << "10. Exit" << endl;
+        cout << "Enter your choice: ";
+        cin >> choice;
 
-    auto result1 = mat1 * mat2;
-    cout << "Matrix-matrix multiplication result:" << endl;
-    result1.display();
-
-    auto result2 = mat1 * mat3;
-    cout << "Matrix-vector multiplication result:" << endl;
-    result2.display();
-
-    auto result3 = mat1 + mat2;
-    cout << "Matrix addition result:" << endl;
-    result3.display();
-
-    auto result4 = mat1 - mat2;
-    cout << "Matrix subtraction result:" << endl;
-    result4.display();
-
-    auto result5 = mat3 * 2.0; // Multiplication of vector by a scalar
-    cout << "Vector multiplication by scalar result:" << endl;
-    result5.display();
-
-    try {
-        Matrix<double, 2, 2> inverse = mat1.invert();
-        cout << "Inverse Matrix:" << endl;
-        inverse.display();
-    } catch (const exception& e) {
-        cerr << "Error: " << e.what() << endl;
-    }
-
-    try {
-        // Calculate eigenvalues
-        auto eigenvalues = mat1.eigenvalues();
-        cout << "Eigenvalues:" << endl;
-        for (const auto& value : eigenvalues) {
-            cout << value << endl;
+        switch (choice) {
+            case 1:
+                performAddition(mat1, mat2, true, true);
+                break;
+            case 2:
+                performSubtraction(mat1, mat2, true, true);
+                break;
+            case 3:
+                performScalarMultiplication(mat1, true);
+                break;
+            case 4:
+                performMatrixMultiplication(mat1, mat2, true, true);
+                break;
+            case 5:
+                cout << "Select the target for transpose:" << endl;
+                cout << "1. Matrix 1" << endl;
+                cout << "2. Matrix 2" << endl;
+                cout << "Enter your choice: ";
+                int targetTranspose;
+                cin >> targetTranspose;
+                switch (targetTranspose) {
+                    case 1:
+                        performTranspose(mat1, true);
+                        break;
+                    case 2:
+                        performTranspose(mat2, true);
+                        break;
+                    default:
+                        cerr << "Invalid choice for transpose" << endl;
+                }
+                break;
+            case 6:
+                cout << "Select the target for norm:" << endl;
+                cout << "1. Matrix 1" << endl;
+                cout << "2. Matrix 2" << endl;
+                cout << "Enter your choice: ";
+                int targetNorm;
+                cin >> targetNorm;
+                switch (targetNorm) {
+                    case 1:
+                        performNorm(mat1, true);
+                        break;
+                    case 2:
+                        performNorm(mat2, true);
+                        break;
+                    default:
+                        cerr << "Invalid choice for norm" << endl;
+                }
+                break;
+            case 7:
+                performInnerProduct(mat1, mat2, true, true);
+                break;
+            case 8:
+                cout << "Select the target for inverse:" << endl;
+                cout << "1. Matrix 1" << endl;
+                cout << "2. Matrix 2" << endl;
+                cout << "Enter your choice: ";
+                int targetInverse;
+                cin >> targetInverse;
+                switch (targetInverse) {
+                    case 1:
+                        performInverse(mat1, true);
+                        break;
+                    case 2:
+                        performInverse(mat2, true);
+                        break;
+                    default:
+                        cerr << "Invalid choice for inverse" << endl;
+                }
+                break;
+            case 9:
+                cout << "Select the target for eigenvalues:" << endl;
+                cout << "1. Matrix 1" << endl;
+                cout << "2. Matrix 2" << endl;
+                cout << "Enter your choice: ";
+                int targetEigen;
+                cin >> targetEigen;
+                switch (targetEigen) {
+                    case 1:
+                        performEigenValues(mat1, true);
+                        break;
+                    case 2:
+                        performEigenValues(mat2, true);
+                        break;
+                    default:
+                        cerr << "Invalid choice for eigenvalues" << endl;
+                }
+                break;
+            case 10:
+                cout << "Exiting..." << endl;
+                break;
+            default:
+                cerr << "Invalid choice" << endl;
         }
-    } catch (const exception& e) {
-        cerr << "Error: " << e.what() << endl;
-    }
-
-    try {
-        double arr1[3][3] = {{4, 3, 2}, {2, 2, 3}, {3, 1, 2}};
-        Matrix<double, 3, 3> mat1(arr1);
-
-        cout << "Matrix for LU decomposition:" << endl;
-        mat1.display();
-
-        // Perform LU decomposition
-        auto luDecomp = mat1.luDecomposition();
-        Matrix<double, 3, 3> L = luDecomp.first;
-        Matrix<double, 3, 3> U = luDecomp.second;
-
-        cout << "Lower Triangular Matrix (L):" << endl;
-        L.display();
-
-        cout << "Upper Triangular Matrix (U):" << endl;
-        U.display();
-    } catch (const exception& e) {
-        cerr << "Error: " << e.what() << endl;
-    }
-
-    // Define vectors
-    Matrix<double, 2, 1> vec1;
-    vec1(0, 0) = 1;
-    vec1(1, 0) = 2;
-
-    Matrix<double, 2, 1> vec2;
-    vec2(0, 0) = 3;
-    vec2(1, 0) = 4;
-
-    // Calculate norm of vectors
-    cout << "Norm of vec1: " << vec1.norm() << endl;
-    cout << "Norm of vec2: " << vec2.norm() << endl;
-
-    // Calculate inner product of vectors
-    cout << "Inner product of vec1 and vec2: " << vec1.innerProduct(vec2) << endl;
+    } while (choice != 10);
 
     return 0;
 }
